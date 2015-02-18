@@ -45,6 +45,8 @@ my $keep_all_since             = undef;
 my $expiration_tag_name        = undef;
 my $expiration_tag_optional    = undef;
 
+my $skip_in_use                = undef;
+
 Getopt::Long::config('no_ignore_case');
 GetOptions(
   'h|help|?'                      => \$Help,
@@ -73,6 +75,8 @@ GetOptions(
   'keep-all-since=s'             => \$keep_all_since,
   'expiration-tag-name=s'        => \$expiration_tag_name,
   'expiration-tag-optional'      => \$expiration_tag_optional,
+  
+  'skip-in-use'                  => \$skip_in_use,
 ) or pod2usage(2);
 
 my $filesystem_frozen = 0;
@@ -233,8 +237,13 @@ sub expire_snapshots_for_volume {
                     or die "$Prog: ERROR deleting snapshot: $snapshot_id\n";
             };
             if ( $@  ){
-                die "$Prog: ERROR: delete_snapshot $snapshot_id: ",
-                    ec2_error_message($@);
+                if ( $skip_in_use && ref $@ && ref $@->errors eq 'ARRAY' && @{$@->errors}[0]->code eq 'InvalidSnapshot.InUse' ) {
+                    $Quiet or warn "Skipping deleting snapshot $snapshot_id: ".@{$@->errors}[0]->message."\n";
+                }
+                else {
+                    die "$Prog: ERROR: delete_snapshot $snapshot_id: ",
+                        ec2_error_message($@);
+                }
             }
         }
 
